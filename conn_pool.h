@@ -17,13 +17,26 @@ enum{
     STATE_IDLE
 };
 
-typedef struct{
+/**********************************************
+
+	            /----------------------------+
+	  conn_t  <--------------------------+   |
+	 +------+                            |   |
+	 |  my  |   --->  [my_conn_t].conn --+   |
+	 +------+                                |
+	 |  cli |   --->  [cli_conn_t].conn -----+
+	 +------+
+	 |  ... |
+	 +------+
+
+**********************************************/
+typedef struct {
     uint32_t connid;
-    my_conn_t *my;//对应的mysql连接是哪个 
-    void *cli;//对应这个连接结构的客户端连接 
-    buf_t buf;
-    int state;
-    time_t state_time;
+    my_conn_t *my;      // 对应的mysql连接是哪个 
+    void *cli;          // 对应这个连接结构的客户端连接 
+    buf_t buf;          // 缓存
+    int state;          // 状态
+    time_t state_time;  // 状态更改的时间
     char curdb[64];
     uint8_t comno;
     char arg[1024];

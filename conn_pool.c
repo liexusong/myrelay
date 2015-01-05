@@ -59,7 +59,7 @@ int conn_pool_init(size_t count)
     int res = 0;
     pid_t pid;
 
-    pid = getpid();
+    pid = getpid(); // 当前的进程ID
 
 	//申请一个给连接用的内存池
     conn_pool = genpool_init(sizeof(conn_t), count);
@@ -68,14 +68,15 @@ int conn_pool_init(size_t count)
         return -1;
     }
 
-    INIT_LIST_HEAD(&read_client_head);
-    INIT_LIST_HEAD(&write_mysql_head);
+    INIT_LIST_HEAD(&read_client_head); // 读连接
+    INIT_LIST_HEAD(&write_mysql_head); // 写mysql连接
     INIT_LIST_HEAD(&read_mysql_write_client_head);
     INIT_LIST_HEAD(&prepare_mysql_head);
     INIT_LIST_HEAD(&idle_head);
 
     srand(pid * time(NULL));
     connid = rand();
+
 //注册各种事件的超时函数
     if( (res = timer_register(read_client_timeout_timer, 30, \
                                 "read_client_timeout_timer", 1) < 0) ){
@@ -178,12 +179,12 @@ conn_t *conn_open(int fd, uint32_t ip, uint16_t port)
     int res = 0;
     conn_t *c;
 
-    if( (c = conn_alloc()) == NULL ){//这个连接其实是个中间搭桥的连接。
+    if( (c = conn_alloc()) == NULL ){ // 这个连接其实是个中间搭桥的连接。
         log(g_log, "conn alloc error\n");
         return NULL;
     }
 
-    if( (res = cli_conn_open(c, fd, ip, port)) < 0 ){//将c跟当前的fd连接起来，建立一个客户端连接结构
+    if( (res = cli_conn_open(c, fd, ip, port)) < 0 ){ // 将conn跟当前的fd连接起来，建立一个客户端连接结构
         log(g_log, "cli conn open error\n");
         conn_release(c);
         return NULL;
@@ -328,6 +329,7 @@ int conn_state_set_reading_client(conn_t *c)
     c->state = STATE_READING_CLIENT;
     c->state_time = time(NULL);
 
+    // 把连接移动到read_client_head列表中
     list_move_tail(&(c->link), &read_client_head);
 
     debug(g_log, "conn:%d reading client\n", c->connid);

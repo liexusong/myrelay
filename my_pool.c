@@ -222,7 +222,7 @@ int my_pool_init(int count)
         log_err(g_log, "malloc error\n");
         return -1;
     }
-	for( i = 0 ; i < MAX_SLAVE_NODE; ++i ){// 初始化数据结构
+	for( i = 0 ; i < MAX_SLAVE_NODE; ++i ){ // 初始化数据结构
 		my_node_init( &( mypool->slave[i]) ) ;
 	}
 

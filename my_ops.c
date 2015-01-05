@@ -264,15 +264,17 @@ int cli_hs_stage1_prepare(conn_t *c)
 
     cli = c->cli;
 
-    if( (res = conn_alloc_my_conn(c)) < 0 ){
+    if( (res = conn_alloc_my_conn(c)) < 0 ){ // 获取一个可用的mysql连接
         log(g_log, "conn:%u conn_alloc_my_conn error\n", c->connid);
         return -1;
     }
-    my = c->my;
-    node = my->node;
-    info = node->info;
+    my = c->my;        // mysql连接
+    node = my->node;   // mysql连接对应的node
+    info = node->info; // mysql的信息
 
     buf = &(cli->buf);
+
+    // 发送mysql信息给客户端
 
     bzero(&init, sizeof(init));
     init.pktno = 0;
@@ -293,6 +295,7 @@ int cli_hs_stage1_prepare(conn_t *c)
         return res;
     }
 
+    // 开始发送mysql信息给客户端
     res = add_handler(cli->fd, EPOLLOUT, cli_hs_stage1_cb, cli);
     if(res < 0){
         log(g_log, "conn:%u add_handler fail\n", c->connid);
@@ -332,6 +335,7 @@ int cli_hs_stage1_cb(int fd, void *arg)
             goto end;
         }
 
+        // 监听客户端连接, 回调为: cli_hs_stage2_cb()
         res = add_handler(fd, EPOLLIN, cli_hs_stage2_cb, arg);
         if(res < 0){
             log(g_log, "conn:%u add_handler fd[%d] error\n", c->connid, fd);
@@ -371,7 +375,7 @@ int cli_hs_stage2_cb(int fd, void *arg)
     c = cli->conn;
     buf = &(cli->buf);
 
-
+    // 读取客户端的登录认证信息
     if( (res = my_real_read(fd, buf, &done)) < 0 ){
         log_err(g_log, "conn:%u my_real_read error\n", c->connid);
         goto end;
@@ -383,17 +387,21 @@ int cli_hs_stage2_cb(int fd, void *arg)
             goto end;
         }
 
+        // 解析登录包
         if( (res = parse_login(buf, &login)) < 0 ){
             log(g_log, "conn:%u parse login error\n", c->connid);
             goto end;
         }
 
+        // 对比用户名
         if(!strcmp(login.user, g_conf.user)){
             scramble(token, cli->scram, g_conf.passwd);
             if(memcmp(token, login.scram, 20) == 0){
 
                 strncpy(c->curdb, login.db, sizeof(c->curdb) - 1);
                 result.pktno = 2;
+
+                // 登录返回信息
                 if( (res = make_auth_result(buf, &result)) < 0 ){
                     log(g_log, "conn:%u make auth result error\n", c->connid);
                     goto end;
@@ -541,38 +549,42 @@ int cli_query_cb(int fd, void *arg)
 
     cli = (cli_conn_t *)arg;
     c = cli->conn;
-    buf = &(c->buf);
+    buf = &(c->buf); // 使用conn_t的buffer
     my = c->my;
 
-    if(c->state == STATE_IDLE){
-        conn_state_set_reading_client(c);
+    if(c->state == STATE_IDLE) { // 初始化状态
+        conn_state_set_reading_client(c);  // 设置为读取客户端请求状态
         gettimeofday(&(c->tv_start), NULL);
-    } else if( (c->state == STATE_PREPARE_MYSQL) || (c->state == STATE_WRITING_MYSQL) ){
+
+    } else if( (c->state == STATE_PREPARE_MYSQL) || (c->state == STATE_WRITING_MYSQL) ) {  // 因为还没有发生完上一次请求给mysql, 所以不能再读取客户端请求
         log(g_log, "conn:%u client can be read when preparing or writing mysql\n", c->connid);
         goto end;
-    } else if(c->state == STATE_READ_MYSQL_WRITE_CLIENT) {//从mysql获取了结果，准备发送给client，所以记录sql数据 
-        conn_state_set_reading_client(c);
+
+    } else if(c->state == STATE_READ_MYSQL_WRITE_CLIENT) { // 从mysql获取了结果, 准备发送给client 
+        conn_state_set_reading_client(c); // 不再读取mysql的结果
         sqldump(c);
         gettimeofday(&(c->tv_start), NULL);
 
-        if( (res = del_handler(my->fd)) < 0 ){
+        if( (res = del_handler(my->fd)) < 0 ) { // 不再读取mysql返回的结果
             log(g_log, "conn:%u del_handler error\n", c->connid);
         }
+
     } else {
         gettimeofday(&(c->tv_end), NULL);
     }
 
-    if( (res = my_real_read(fd, buf, &done)) < 0 ){
+    // 读取客户端请求
+    if( (res = my_real_read(fd, buf, &done)) < 0 ) {
         log_err(g_log, "conn:%u my_real_read error with client[%s:%d] \n", c->connid, ip_to_string(cli->ip), cli->port);
         goto end;//客户端数据读取出错,关闭2端的连接?
     }
 
-    if(done){//读取了一个完整的包，下面准备处理 
+    if(done) { // 读取了一个完整的包，下面准备处理 
         if( (res = parse_com(buf, &com)) < 0 ){
             log(g_log, "conn:%u parse com error\n", c->connid);
             goto end;
         }
-        c->comno = com.comno;
+        c->comno = com.comno; // 请求类型
         strncpy(c->arg, com.arg, sizeof(c->arg) - 1);
         c->arg[sizeof(c->arg) - 1] = '\0';
 
@@ -596,7 +608,7 @@ int cli_query_cb(int fd, void *arg)
 
             case COM_INIT_DB:
                 debug(g_log, "init db, ignore frist.\n");
-				res = cli_com_ignored(c);//先忽略这个数据库初始化请求，待会query的时候再看数据库是否一样。这样能避免重复use db
+				res = cli_com_ignored(c); // 先忽略这个数据库初始化请求，待会query的时候再看数据库是否一样。这样能避免重复use db
                 strncpy(c->curdb, c->arg, sizeof(c->curdb) - 1);
 				/*
                 if( (res = cli_com_forward(c)) < 0 ){
@@ -636,15 +648,15 @@ int cli_query_cb(int fd, void *arg)
                     log(g_log, "conn:%u alloc mysql conn error\n", c->connid);
                     goto end;
                 }*/
-                my = c->my;
+                my = c->my; // 当前客户端连接对应的mysql连接
 				//判断数据库是否相等
-                if(c->curdb != NULL && strcmp(my->ctx.curdb, c->curdb)){//还需要给服务器发送切换数据库的命令 
+                if(c->curdb != NULL && strcmp(my->ctx.curdb, c->curdb)){ // 还需要给服务器发送切换数据库的命令 
                     if( (res = my_use_db_prepare(c)) < 0 ){
                         log(g_log, "conn:%u my_use_db_prepare error\n", c->connid);
                         goto end;
                     }
 
-                    conn_state_set_prepare_mysql(c);//标记为这个在等待切换数据库，完成后才能做后面的事情，
+                    conn_state_set_prepare_mysql(c); // 标记为这个在等待切换数据库，完成后才能做后面的事情，
 					//就是真正处理命令转发my_use_db_prepare里面会放回调的
 
                     break;
@@ -695,18 +707,19 @@ int my_query_cb(int fd, void *arg)
     c = my->conn;
     buf = &(c->buf);
 
-
+    // 发送请求到mysql
     if( (res = my_real_write(fd, buf, &done)) < 0 ){
         log_err(g_log, "conn:%u my_real_write error\n", c->connid);
         goto end;
     }
 
-    if(done){
+    if(done) {
         if( (res = del_handler(fd)) < 0 ){
             log(g_log, "conn:%u del_handler error\n", c->connid);
             goto end;
         }
 
+        // 读取mysql的回复数据
         res = add_handler(fd, EPOLLIN, my_answer_cb, my);
         if(res < 0){
             log(g_log, "conn:%u add_handler error\n", c->connid);
@@ -747,24 +760,26 @@ int my_answer_cb(int fd, void *arg)
     buf = &(c->buf);
     cli = c->cli;
 
-
+    // 读取mysql返回的数据
     if( (res = my_real_read_result_set(fd, buf)) < 0 ){
         log_err(g_log, "conn:%u my_real_read_result_set error\n", c->connid);
         goto end;
     }
 
+    // delete mysql connection handler
     if( (res = del_handler(fd)) < 0 ){
         log(g_log, "conn:%u del_handler error\n", c->connid);
         goto end;
     }
 
+    // delete client connection handler
     if( (res = del_handler(cli->fd)) < 0 ){
         log(g_log, "conn:%u del_handler error\n", c->connid);
         goto end;
     }
 
     res = add_handler(cli->fd, EPOLLOUT, cli_answer_cb, cli);
-    if(res < 0){
+    if(res < 0) {
         log(g_log, "conn:%u add_handler error\n", c->connid);
         goto end;
     }
@@ -799,25 +814,27 @@ int cli_answer_cb(int fd, void *arg)
     buf = &(c->buf);
     my = c->my;
 
-
+    // 发送数据给客户端
     if( (res = my_real_write(fd, buf, &done)) < 0 ){
         log_err(g_log, "conn:%u my_real_write error\n", c->connid);
         goto end;
     }
 
-    if(done){
+    if(done){ // 客户端数据发送完毕
         if( (res = del_handler(fd)) < 0 ){
             log(g_log, "conn:%u del_handler error\n", c->connid);
             goto end;
         }
 
-        res = add_handler(fd, EPOLLIN, cli_query_cb, cli);
+        // 下面把客户端连接和mysql同时添加到epoll进行监听, 看看那个先获得读写权限
+
+        res = add_handler(fd, EPOLLIN, cli_query_cb, cli); // 继续读取其他请求
         if(res < 0){
             log(g_log, "conn:%u add_handler error\n", c->connid);
             goto end;
         }
 
-        res = add_handler(my->fd, EPOLLIN, my_answer_cb, my);
+        res = add_handler(my->fd, EPOLLIN, my_answer_cb, my); // 或者继续读取mysql返回的数据
         if(res < 0){
             log(g_log, "conn:%u add_handler error\n", c->connid);
             goto end;

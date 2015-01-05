@@ -74,12 +74,14 @@ cli_conn_alloc(conn_t *conn, int fd, uint32_t ip, uint16_t port)
     c->conn = conn;
     INIT_LIST_HEAD(&(c->link));
 
+    // 初始化buffer
     if( (res = buf_init(&(c->buf))) < 0 ){
         log(g_log, "buf_init error\n");
         genpool_release_page(cli_pool, c);
         return NULL;
     }
 
+    // 创建一个随机的scram
     if( (res = make_rand_scram(c->scram, SCRAMBLE_LENGTH)) < 0 ){
         log(g_log, "make rand scram error\n");
         genpool_release_page(cli_pool, c);

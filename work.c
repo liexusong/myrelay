@@ -59,11 +59,13 @@ int work(int fd)
         level = LOG_LEVEL_LOG;
     }
 
+    // 初始化log
     if( (g_log = log_init(g_conf.log, level)) == NULL ){
         fprintf(stderr, "log init error\n");
         exit(-1);
     }
 
+    // 初始化epoll
     if(init_handler( MAX_EVENT ) < 0){
         log(g_log, "handler init error\n");
         exit(-1);
@@ -96,7 +98,7 @@ int work(int fd)
     }
 
     // mysql connection pool init
-    if(my_pool_init(g_conf.max_connections) < 0){//设置mysql连接的初始化结构，各种定时器等
+    if(my_pool_init(g_conf.max_connections) < 0){ //设置mysql连接的初始化结构，各种定时器等
         log(g_log, "mysql pool init error\n");
         exit(-1);
     } else {
@@ -124,15 +126,18 @@ int work(int fd)
         log(g_log, "mysql_conf_parse %s error\n", g_conf.mysql_conf);
     }
 
-    for(i = 0; i < myconf_cur.scount; i++){//提前连接slave
+    for(i = 0; i < myconf_cur.scount; i++){ //提前连接slave
         mynode = &(myconf_cur.slave[i]);
-        res = my_slave_reg(mynode->host, mynode->port, mynode->user, mynode->pass, mynode->cnum, mynode->maxnum );
+        // 连接到mysql
+        res = my_slave_reg(mynode->host, mynode->port, mynode->user,
+            mynode->pass, mynode->cnum, mynode->maxnum );
         if(res < 0){
             log(g_log, "my_slave_reg error\n");
         }
     }
 
     // listen fd epoll
+    // 开始接收客户端连接
     if( (res = add_handler(fd, EPOLLIN, accept_client_cb, NULL)) < 0 ){
         log(g_log, "add_handler listenfd[%d] fail\n", fd);
         return -1;
@@ -177,11 +182,11 @@ static int accept_client_cb(int listenfd, void *arg)
     conn_t *c;
 
 
-    while(1){//一次接收完所有客户端
-        if(!my_pool_have_conn()){//如果没有足够的mysql连接了，不接受这个accept，也就不会接收accept这个客户端连接。
-			//其实这个完全可以在验证成功后再做，不然容易被攻击。
-			//尝试创建新的连接。
-			int tmpres = my_try_increase_connection() ;//由于这里实惠预先分配的机制，也就是，就算待会没有新人了，也会创建一个连接
+    while(1) { // 一次接收完所有客户端
+        if(!my_pool_have_conn()) { // 如果没有足够的mysql连接了，不接受这个accept，也就不会接收accept这个客户端连接。
+			// 其实这个完全可以在验证成功后再做，不然容易被攻击。
+			// 尝试创建新的连接。
+			int tmpres = my_try_increase_connection() ; // 由于这里实惠预先分配的机制，也就是，就算待会没有新人了，也会创建一个连接
             log(g_log, "mysql pool is empty, my_try_increase_connection res[%d], waiting\n", tmpres);
             break;
         }
@@ -202,7 +207,7 @@ static int accept_client_cb(int listenfd, void *arg)
         clientip = ntohl(cliaddr.sin_addr.s_addr);
         clientport = ntohs(cliaddr.sin_port);
 
-        if( (c = conn_open(clientfd, clientip, clientport)) == NULL ){//分配conn_t和cli_conn_t， 并挂接起来
+        if( (c = conn_open(clientfd, clientip, clientport)) == NULL ){ // 分配conn_t和cli_conn_t, 并挂接起来
             log(g_log, "connection alloc fail, close connection\n");
             close(clientfd);
         }
@@ -270,7 +275,8 @@ static int usr1_reload(void)
         }
 
         if(j == myconf_cur.scount){
-            my_slave_reg(new->host, new->port, new->user, new->pass, new->cnum, new->maxnum);
+            my_slave_reg(new->host, new->port, new->user,
+                new->pass, new->cnum, new->maxnum);
         }
     }
 

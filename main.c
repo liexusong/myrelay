@@ -57,6 +57,7 @@ int main(int argc, char *argv[])
         USAGE();
         exit(-1);
     }
+    // 读取myrelay的配置
     if(my_conf_init(argv[1]) < 0){
         log(g_log, "conf[%s] init error\n", argv[1]);
         exit(-1);
@@ -66,7 +67,7 @@ int main(int argc, char *argv[])
 
     // make listen
     while(1){
-        listenfd = make_listen_nonblock(g_conf.ip, g_conf.port);
+        listenfd = make_listen_nonblock(g_conf.ip, g_conf.port); // 创建一个非阻塞的socket
         if(listenfd < 0){
             log_err(g_log, "%s:%s listen socket error\n", g_conf.ip, g_conf.port);
         } else {
@@ -89,11 +90,12 @@ int main(int argc, char *argv[])
         daemon(1, 1);
     }
 
-	work(listenfd);
+	work(listenfd); // 开始工作
 
 	my_conf_destroy() ;
 
 return 0 ;//暂时不用下面的功能
+
     // fork children
     for(i = 0; i < g_conf.worker; i++){
         while( (pid = fork()) < 0 ){

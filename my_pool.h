@@ -14,16 +14,16 @@ typedef struct{
 } my_ctx_t;
 
 typedef struct{
-    int fd;//mysql连接对应的tcp socket fd
-    void *node;//这个mysql连接所属的机器节点是哪个
-    struct list_head link;
-    void *conn;
+    int fd;       // mysql连接对应的tcp socket fd
+    void *node;   // 这个mysql连接所属的机器节点是哪个
+    struct list_head link; // 与其他mysql连接组成链表
+    void *conn;   // 指向conn_t结构
     buf_t buf;
     my_ctx_t ctx;
     time_t state_time;
-    time_t lastused_time;//这个连接的上次交互使用时间，是说被客户端使用哈
+    time_t lastused_time; // 这个连接的上次交互使用时间，是说被客户端使用哈
 
-    char setnamesql[64];//客户端发送过来的SET NAMES utf8 指令，为了避免多次发送，进行缓存
+    char setnamesql[64]; // 客户端发送过来的SET NAMES utf8 指令，为了避免多次发送，进行缓存
 } my_conn_t;
 
 typedef struct{
